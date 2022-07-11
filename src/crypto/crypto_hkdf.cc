@@ -100,6 +100,9 @@ bool HKDFTraits::DeriveBits(
     Environment* env,
     const HKDFConfig& params,
     ByteSource* out) {
+#ifdef LIBRESSL_VERSION_NUMBER
+  return false;
+#else
   EVPKeyCtxPointer ctx =
       EVPKeyCtxPointer(EVP_PKEY_CTX_new_id(EVP_PKEY_HKDF, nullptr));
   if (!ctx || !EVP_PKEY_derive_init(ctx.get()) ||
@@ -124,6 +127,7 @@ bool HKDFTraits::DeriveBits(
 
   *out = std::move(buf).release();
   return true;
+#endif
 }
 
 void HKDFConfig::MemoryInfo(MemoryTracker* tracker) const {

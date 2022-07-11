@@ -117,12 +117,14 @@ bool Hash::HashInit(const EVP_MD* md, Maybe<unsigned int> xof_md_len) {
 
   md_len_ = EVP_MD_size(md);
   if (xof_md_len.IsJust() && xof_md_len.FromJust() != md_len_) {
+#ifndef LIBRESSL_VERSION_NUMBER
     // This is a little hack to cause createHash to fail when an incorrect
     // hashSize option was passed for a non-XOF hash function.
     if ((EVP_MD_flags(md) & EVP_MD_FLAG_XOF) == 0) {
       EVPerr(EVP_F_EVP_DIGESTFINALXOF, EVP_R_NOT_XOF_OR_INVALID_LENGTH);
       return false;
     }
+#endif
     md_len_ = xof_md_len.FromJust();
   }
 
@@ -181,8 +183,12 @@ void Hash::HashDigest(const FunctionCallbackInfo<Value>& args) {
       // The output length should always equal hash->md_len_
       CHECK_EQ(len, hash->md_len_);
     } else {
+#ifdef LIBRESSL_VERSION_NUMBER
+      ret = 0;
+#else
       ret = EVP_DigestFinalXOF(
           hash->mdctx_.get(), digest.data<unsigned char>(), len);
+#endif
     }
 
     if (ret != 1)
@@ -262,12 +268,14 @@ Maybe<bool> HashTraits::AdditionalConfig(
     params->length =
         static_cast<uint32_t>(args[offset + 2]
             .As<Uint32>()->Value()) / CHAR_BIT;
+#ifndef LIBRESSL_VERSION_NUMBER
     if (params->length != expected) {
       if ((EVP_MD_flags(params->digest) & EVP_MD_FLAG_XOF) == 0) {
         THROW_ERR_CRYPTO_INVALID_DIGEST(env, "Digest method not supported");
         return Nothing<bool>();
       }
     }
+#endif
   }
 
   return Just(true);
@@ -295,7 +303,11 @@ bool HashTraits::DeriveBits(
     int ret =
         (length == expected)
             ? EVP_DigestFinal_ex(ctx.get(), buf.data<unsigned char>(), &length)
+#ifdef LIBRESSL_VERSION_NUMBER
+            : 0;
+#else
             : EVP_DigestFinalXOF(ctx.get(), buf.data<unsigned char>(), length);
+#endif
 
     if (UNLIKELY(ret != 1))
       return false;

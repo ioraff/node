@@ -138,12 +138,17 @@ long VerifyPeerCertificate(  // NOLINT(runtime/int)
     X509_free(peer_cert);
     err = SSL_get_verify_result(ssl.get());
   } else {
+#ifndef OPENSSL_NO_PSK
     const SSL_CIPHER* curr_cipher = SSL_get_current_cipher(ssl.get());
+#endif
     const SSL_SESSION* sess = SSL_get_session(ssl.get());
     // Allow no-cert for PSK authentication in TLS1.2 and lower.
     // In TLS1.3 check that session was reused because TLS1.3 PSK
     // looks like session resumption.
-    if (SSL_CIPHER_get_auth_nid(curr_cipher) == NID_auth_psk ||
+    if (
+#ifndef OPENSSL_NO_PSK
+        SSL_CIPHER_get_auth_nid(curr_cipher) == NID_auth_psk ||
+#endif
         (SSL_SESSION_get_protocol_version(sess) == TLS1_3_VERSION &&
          SSL_session_reused(ssl.get()))) {
       return X509_V_OK;
@@ -167,6 +172,9 @@ bool UseSNIContext(
 }
 
 const char* GetClientHelloALPN(const SSLPointer& ssl) {
+#ifdef LIBRESSL_VERSION_NUMBER
+  return nullptr;
+#else
   const unsigned char* buf;
   size_t len;
   size_t rem;
@@ -183,9 +191,13 @@ const char* GetClientHelloALPN(const SSLPointer& ssl) {
   len = (buf[0] << 8) | buf[1];
   if (len + 2 != rem) return nullptr;
   return reinterpret_cast<const char*>(buf + 3);
+#endif
 }
 
 const char* GetClientHelloServerName(const SSLPointer& ssl) {
+#ifdef LIBRESSL_VERSION_NUMBER
+  return nullptr;
+#else
   const unsigned char* buf;
   size_t len;
   size_t rem;
@@ -211,6 +223,7 @@ const char* GetClientHelloServerName(const SSLPointer& ssl) {
   if (len + 2 > rem)
     return nullptr;
   return reinterpret_cast<const char*>(buf + 5);
+#endif
 }
 
 const char* GetServerName(SSL* ssl) {
@@ -323,7 +336,9 @@ MaybeLocal<Value> GetCipherValue(Environment* env, const SSL_CIPHER* cipher) {
 }
 
 constexpr auto GetCipherName = GetCipherValue<SSL_CIPHER_get_name>;
+#ifndef LIBRESSL_VERSION_NUMBER
 constexpr auto GetCipherStandardName = GetCipherValue<SSL_CIPHER_standard_name>;
+#endif
 constexpr auto GetCipherVersion = GetCipherValue<SSL_CIPHER_get_version>;
 
 StackOfX509 CloneSSLCerts(X509Pointer&& cert,
@@ -1050,6 +1065,9 @@ MaybeLocal<Array> GetClientHelloCiphers(
     Environment* env,
     const SSLPointer& ssl) {
   EscapableHandleScope scope(env->isolate());
+#ifdef LIBRESSL_VERSION_NUMBER
+  return MaybeLocal<Array>();
+#else
   const unsigned char* buf;
   size_t len = SSL_client_hello_get0_ciphers(ssl.get(), &buf);
   size_t count = len / 2;
@@ -1077,6 +1095,7 @@ MaybeLocal<Array> GetClientHelloCiphers(
   }
   Local<Array> ret = Array::New(env->isolate(), ciphers.out(), count);
   return scope.Escape(ret);
+#endif
 }
 
 
@@ -1090,10 +1109,12 @@ MaybeLocal<Object> GetCipherInfo(Environment* env, const SSLPointer& ssl) {
                   info,
                   env->name_string(),
                   GetCurrentCipherValue<GetCipherName>(env, ssl)) ||
+#ifndef LIBRESSL_VERSION_NUMBER
       !Set<Value>(env->context(),
                   info,
                   env->standard_name_string(),
                   GetCurrentCipherValue<GetCipherStandardName>(env, ssl)) ||
+#endif
       !Set<Value>(env->context(),
                   info,
                   env->version_string(),

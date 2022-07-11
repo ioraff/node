@@ -15,7 +15,9 @@
 #include <openssl/err.h>
 #include <openssl/evp.h>
 #include <openssl/ec.h>
-#include <openssl/kdf.h>
+#ifndef LIBRESSL_VERSION_NUMBER
+#  include <openssl/kdf.h>
+#endif
 #include <openssl/rsa.h>
 #include <openssl/dsa.h>
 #include <openssl/ssl.h>
@@ -35,6 +37,17 @@
 #include <optional>
 #include <string>
 #include <vector>
+
+#ifdef LIBRESSL_VERSION_NUMBER
+#  define OPENSSL_memdup(str, s) \
+         BUF_memdup(str, s)
+#  define NID_ED25519     NID_Ed25519
+#  define NID_ED448       NID_Ed448
+#  define EVP_PKEY_X25519  NID_X25519
+#  define EVP_PKEY_ED25519 NID_ED25519
+#  define EVP_PKEY_X448    NID_X448
+#  define EVP_PKEY_ED448   NID_ED448
+#endif
 
 namespace node {
 namespace crypto {
@@ -234,7 +247,17 @@ class ByteSource {
     Builder(const Builder&) = delete;
     Builder& operator=(const Builder&) = delete;
 
-    ~Builder() { OPENSSL_clear_free(data_, size_); }
+    ~Builder() {
+#ifdef LIBRESSL_VERSION_NUMBER
+      if (data_ != NULL) {
+        if (size_)
+          OPENSSL_cleanse(data_, size_);
+        OPENSSL_free(data_);
+      }
+#else
+      OPENSSL_clear_free(data_, size_);
+#endif
+    }
 
     // Returns the underlying non-const pointer.
     template <typename T>
@@ -251,7 +274,15 @@ class ByteSource {
       if (resize) {
         CHECK_LE(*resize, size_);
         if (*resize == 0) {
+#ifdef LIBRESSL_VERSION_NUMBER
+          if (data_ != NULL) {
+            if (size_)
+              OPENSSL_cleanse(data_, size_);
+            OPENSSL_free(data_);
+          }
+#else
           OPENSSL_clear_free(data_, size_);
+#endif
           data_ = nullptr;
         }
         size_ = *resize;

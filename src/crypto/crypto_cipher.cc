@@ -28,7 +28,7 @@ bool IsSupportedAuthenticatedMode(const EVP_CIPHER* cipher) {
   switch (EVP_CIPHER_mode(cipher)) {
   case EVP_CIPH_CCM_MODE:
   case EVP_CIPH_GCM_MODE:
-#ifndef OPENSSL_NO_OCB
+#if !( defined(OPENSSL_NO_OCB) || defined(LIBRESSL_VERSION_NUMBER) )
   case EVP_CIPH_OCB_MODE:
 #endif
     return true;
@@ -80,7 +80,9 @@ void GetCipherInfo(const FunctionCallbackInfo<Value>& args) {
     case EVP_CIPH_CTR_MODE: mode_label = "ctr"; break;
     case EVP_CIPH_ECB_MODE: mode_label = "ecb"; break;
     case EVP_CIPH_GCM_MODE: mode_label = "gcm"; break;
+#if !( defined(OPENSSL_NO_OCB) || defined(LIBRESSL_VERSION_NUMBER) )
     case EVP_CIPH_OCB_MODE: mode_label = "ocb"; break;
+#endif
     case EVP_CIPH_OFB_MODE: mode_label = "ofb"; break;
     case EVP_CIPH_WRAP_MODE: mode_label = "wrap"; break;
     case EVP_CIPH_XTS_MODE: mode_label = "xts"; break;
@@ -120,6 +122,7 @@ void GetCipherInfo(const FunctionCallbackInfo<Value>& args) {
           break;
         case EVP_CIPH_GCM_MODE:
           // Fall through
+#if !( defined(OPENSSL_NO_OCB) || defined(LIBRESSL_VERSION_NUMBER) )
         case EVP_CIPH_OCB_MODE:
           if (!EVP_CIPHER_CTX_ctrl(
                   ctx.get(),
@@ -129,6 +132,7 @@ void GetCipherInfo(const FunctionCallbackInfo<Value>& args) {
             return;
           }
           break;
+#endif
         default:
           if (check_len != iv_length)
             return;

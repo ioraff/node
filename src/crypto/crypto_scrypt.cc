@@ -18,7 +18,7 @@ using v8::Uint32;
 using v8::Value;
 
 namespace crypto {
-#ifndef OPENSSL_NO_SCRYPT
+#if !( defined(OPENSSL_NO_SCRYPT) || defined(LIBRESSL_VERSION_NUMBER) )
 
 ScryptConfig::ScryptConfig(ScryptConfig&& other) noexcept
   : mode(other.mode),
@@ -141,7 +141,7 @@ bool ScryptTraits::DeriveBits(
   return true;
 }
 
-#endif  // !OPENSSL_NO_SCRYPT
+#endif  // !(OPENSSL_NO_SCRYPT || LIBRESSL_VERSION_NUMBER)
 
 }  // namespace crypto
 }  // namespace node

@@ -1067,7 +1067,7 @@ InitializationResult InitializeOncePerProcess(
   }
 
   if (init_flags & kInitOpenSSL) {
-#if HAVE_OPENSSL && !defined(OPENSSL_IS_BORINGSSL)
+#if HAVE_OPENSSL && !defined(OPENSSL_IS_BORINGSSL) && !defined(LIBRESSL_VERSION_NUMBER)
     {
       std::string extra_ca_certs;
       if (credentials::SafeGetenv("NODE_EXTRA_CA_CERTS", &extra_ca_certs))

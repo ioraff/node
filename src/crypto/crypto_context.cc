@@ -604,6 +604,7 @@ void SecureContext::SetKey(const FunctionCallbackInfo<Value>& args) {
 }
 
 void SecureContext::SetSigalgs(const FunctionCallbackInfo<Value>& args) {
+#ifndef LIBRESSL_VERSION_NUMBER
   SecureContext* sc;
   ASSIGN_OR_RETURN_UNWRAP(&sc, args.Holder());
   Environment* env = sc->env();
@@ -616,6 +617,7 @@ void SecureContext::SetSigalgs(const FunctionCallbackInfo<Value>& args) {
 
   if (!SSL_CTX_set1_sigalgs_list(sc->ctx_.get(), *sigalgs))
     return ThrowCryptoError(env, ERR_get_error());
+#endif
 }
 
 #ifndef OPENSSL_NO_ENGINE

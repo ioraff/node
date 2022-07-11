@@ -428,7 +428,9 @@ void TLSWrap::InitSSL() {
 
   ConfigureSecureContext(sc_.get());
 
+#ifndef LIBRESSL_VERSION_NUMBER
   SSL_set_cert_cb(ssl_.get(), SSLCertCallback, this);
+#endif
 
   if (is_server()) {
     SSL_set_accept_state(ssl_.get());
@@ -1310,6 +1312,9 @@ int TLSWrap::SelectSNIContextCallback(SSL* s, int* ad, void* arg) {
 }
 
 int TLSWrap::SetCACerts(SecureContext* sc) {
+#ifdef LIBRESSL_VERSION_NUMBER
+  return 0;
+#else
   int err = SSL_set1_verify_cert_store(ssl_.get(),
                                        SSL_CTX_get_cert_store(sc->ctx().get()));
   if (err != 1)
@@ -1321,6 +1326,7 @@ int TLSWrap::SetCACerts(SecureContext* sc) {
   // NOTE: `SSL_set_client_CA_list` takes the ownership of `list`
   SSL_set_client_CA_list(ssl_.get(), list);
   return 1;
+#endif
 }
 
 #ifndef OPENSSL_NO_PSK
@@ -1767,7 +1773,11 @@ void TLSWrap::GetSharedSigalgs(const FunctionCallbackInfo<Value>& args) {
   TLSWrap* w;
   ASSIGN_OR_RETURN_UNWRAP(&w, args.Holder());
 
+#ifdef LIBRESSL_VERSION_NUMBER
+  MaybeStackBuffer<Local<Value>, 16> ret_arr(0);
+#else
   SSL* ssl = w->ssl_.get();
+
   int nsig = SSL_get_shared_sigalgs(ssl, 0, nullptr, nullptr, nullptr, nullptr,
                                     nullptr);
   MaybeStackBuffer<Local<Value>, 16> ret_arr(nsig);
@@ -1808,7 +1818,6 @@ void TLSWrap::GetSharedSigalgs(const FunctionCallbackInfo<Value>& args) {
       case NID_id_GostR3410_2001:
         sig_with_md = "gost2001+";
         break;
-
       case NID_id_GostR3410_2012_256:
         sig_with_md = "gost2012_256+";
         break;
@@ -1836,7 +1845,7 @@ void TLSWrap::GetSharedSigalgs(const FunctionCallbackInfo<Value>& args) {
     }
     ret_arr[i] = OneByteString(env->isolate(), sig_with_md.c_str());
   }
-
+#endif
   args.GetReturnValue().Set(
                  Array::New(env->isolate(), ret_arr.out(), ret_arr.length()));
 }
@@ -1899,6 +1908,9 @@ void TLSWrap::Renegotiate(const FunctionCallbackInfo<Value>& args) {
 }
 
 void TLSWrap::GetTLSTicket(const FunctionCallbackInfo<Value>& args) {
+#ifdef LIBRESSL_VERSION_NUMBER
+  return;
+#else
   TLSWrap* w;
   ASSIGN_OR_RETURN_UNWRAP(&w, args.Holder());
   Environment* env = w->env();
@@ -1916,6 +1928,7 @@ void TLSWrap::GetTLSTicket(const FunctionCallbackInfo<Value>& args) {
         Buffer::Copy(env, reinterpret_cast<const char*>(ticket), length)
             .FromMaybe(Local<Object>()));
   }
+#endif
 }
 
 void TLSWrap::NewSessionDone(const FunctionCallbackInfo<Value>& args) {

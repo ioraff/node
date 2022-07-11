@@ -59,7 +59,7 @@ namespace crypto {
   V(Verify)                                                                    \
   V(X509Certificate)
 
-#ifdef OPENSSL_NO_SCRYPT
+#if defined(OPENSSL_NO_SCRYPT) || defined(LIBRESSL_VERSION_NUMBER)
 #define SCRYPT_NAMESPACE_LIST(V)
 #else
 #define SCRYPT_NAMESPACE_LIST(V) V(ScryptJob)

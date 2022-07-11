@@ -521,7 +521,11 @@ bool ECDHBitsTraits::DeriveBits(Environment* env,
       break;
     }
     default: {
+#ifdef LIBRESSL_VERSION_NUMBER
+      EC_KEY* private_key;
+#else
       const EC_KEY* private_key;
+#endif
       {
         Mutex::ScopedLock priv_lock(*m_privkey.mutex());
         private_key = EVP_PKEY_get0_EC_KEY(m_privkey.get());
@@ -641,6 +645,9 @@ WebCryptoKeyExportStatus EC_Raw_Export(
   size_t len = 0;
 
   if (ec_key == nullptr) {
+#ifdef LIBRESSL_VERSION_NUMBER
+    return WebCryptoKeyExportStatus::FAILED;
+#else
     typedef int (*export_fn)(const EVP_PKEY*, unsigned char*, size_t* len);
     export_fn fn = nullptr;
     switch (key_data->GetKeyType()) {
@@ -661,6 +668,7 @@ WebCryptoKeyExportStatus EC_Raw_Export(
     if (fn(m_pkey.get(), data.data<unsigned char>(), &len) == 0)
       return WebCryptoKeyExportStatus::INVALID_KEY_TYPE;
     *out = std::move(data).release(len);
+#endif
   } else {
     if (key_data->GetKeyType() != kKeyTypePublic)
       return WebCryptoKeyExportStatus::INVALID_KEY_TYPE;
@@ -836,7 +844,9 @@ Maybe<bool> ExportJWKEdKey(
           OneByteString(env->isolate(), curve)).IsNothing()) {
     return Nothing<bool>();
   }
-
+#ifdef LIBRESSL_VERSION_NUMBER
+  return Nothing<bool>();
+#else
   size_t len = 0;
   Local<Value> encoded;
   Local<Value> error;
@@ -869,7 +879,7 @@ Maybe<bool> ExportJWKEdKey(
       env->isolate()->ThrowException(error);
     return Nothing<bool>();
   }
-
+#endif
   if (target->Set(
           env->context(),
           env->jwk_kty_string(),

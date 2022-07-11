@@ -94,7 +94,15 @@ ParseKeyResult TryParsePublicKey(
   // OpenSSL might modify the pointer, so we need to make a copy before parsing.
   const unsigned char* p = der_data;
   pkey->reset(parse(&p, der_len));
+#ifdef LIBRESSL_VERSION_NUMBER
+  if (der_data != NULL) {
+    if (der_len)
+      OPENSSL_cleanse(der_data, der_len);
+    OPENSSL_free(der_data);
+  }
+#else
   OPENSSL_clear_free(der_data, der_len);
+#endif
 
   return *pkey ? ParseKeyResult::kParseKeyOk :
                  ParseKeyResult::kParseKeyFailed;
@@ -597,15 +605,23 @@ void ManagedEVPPKey::MemoryInfo(MemoryTracker* tracker) const {
 }
 
 size_t ManagedEVPPKey::size_of_private_key() const {
+#ifdef LIBRESSL_VERSION_NUMBER
+  return 0;
+#else
   size_t len = 0;
   return (pkey_ && EVP_PKEY_get_raw_private_key(
       pkey_.get(), nullptr, &len) == 1) ? len : 0;
+#endif
 }
 
 size_t ManagedEVPPKey::size_of_public_key() const {
+#ifdef LIBRESSL_VERSION_NUMBER
+  return 0;
+#else
   size_t len = 0;
   return (pkey_ && EVP_PKEY_get_raw_public_key(
       pkey_.get(), nullptr, &len) == 1) ? len : 0;
+#endif
 }
 
 // This maps true to Just<bool>(true) and false to Nothing<bool>().
@@ -1096,6 +1112,9 @@ void KeyObjectHandle::InitECRaw(const FunctionCallbackInfo<Value>& args) {
 }
 
 void KeyObjectHandle::InitEDRaw(const FunctionCallbackInfo<Value>& args) {
+#ifdef LIBRESSL_VERSION_NUMBER
+  args.GetReturnValue().Set(false);
+#else
   Environment* env = Environment::GetCurrent(args);
   KeyObjectHandle* key;
   ASSIGN_OR_RETURN_UNWRAP(&key, args.Holder());
@@ -1135,6 +1154,7 @@ void KeyObjectHandle::InitEDRaw(const FunctionCallbackInfo<Value>& args) {
   }
 
   args.GetReturnValue().Set(true);
+#endif
 }
 
 void KeyObjectHandle::Equals(const FunctionCallbackInfo<Value>& args) {

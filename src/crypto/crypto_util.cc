@@ -142,7 +142,7 @@ static Mutex fips_mutex;
 void InitCryptoOnce() {
   Mutex::ScopedLock lock(per_process::cli_options_mutex);
   Mutex::ScopedLock fips_lock(fips_mutex);
-#ifndef OPENSSL_IS_BORINGSSL
+#if !( defined(OPENSSL_IS_BORINGSSL) || defined(LIBRESSL_VERSION_NUMBER) )
   OPENSSL_INIT_SETTINGS* settings = OPENSSL_INIT_new();
 
 #if OPENSSL_VERSION_MAJOR < 3
@@ -186,7 +186,7 @@ void InitCryptoOnce() {
   }
 #endif
 
-#endif  // OPENSSL_IS_BORINGSSL
+#endif  // OPENSSL_IS_BORINGSSL || LIBRESSL_VERSION_NUMBER
 
   // Turn off compression. Saves memory and protects against CRIME attacks.
   // No-op with OPENSSL_NO_COMP builds of OpenSSL.
@@ -323,12 +323,28 @@ ByteSource::ByteSource(ByteSource&& other) noexcept
 }
 
 ByteSource::~ByteSource() {
+#ifdef LIBRESSL_VERSION_NUMBER
+  if (allocated_data_ != NULL) {
+    if (size_)
+      OPENSSL_cleanse(allocated_data_, size_);
+    OPENSSL_free(allocated_data_);
+  }
+#else
   OPENSSL_clear_free(allocated_data_, size_);
+#endif
 }
 
 ByteSource& ByteSource::operator=(ByteSource&& other) noexcept {
   if (&other != this) {
+#ifdef LIBRESSL_VERSION_NUMBER
+    if (allocated_data_ != NULL) {
+      if (size_)
+        OPENSSL_cleanse(allocated_data_, size_);
+      OPENSSL_free(allocated_data_);
+    }
+#else
     OPENSSL_clear_free(allocated_data_, size_);
+#endif
     data_ = other.data_;
     allocated_data_ = other.allocated_data_;
     other.allocated_data_ = nullptr;
@@ -345,7 +361,15 @@ std::unique_ptr<BackingStore> ByteSource::ReleaseToBackingStore() {
       allocated_data_,
       size(),
       [](void* data, size_t length, void* deleter_data) {
+#ifdef LIBRESSL_VERSION_NUMBER
+        if (deleter_data != NULL) {
+          if (length)
+            OPENSSL_cleanse(deleter_data, length);
+          OPENSSL_free(deleter_data);
+        }
+#else
         OPENSSL_clear_free(deleter_data, length);
+#endif
       }, allocated_data_);
   CHECK(ptr);
   allocated_data_ = nullptr;
@@ -487,6 +511,43 @@ Maybe<bool> Decorate(Environment* env, Local<Object> obj,
         c = ToUpper(c);
     }
 
+#ifdef LIBRESSL_VERSION_NUMBER
+#define OSSL_ERROR_CODES_MAP(V)                                               \
+    V(SYS)                                                                    \
+    V(BN)                                                                     \
+    V(RSA)                                                                    \
+    V(DH)                                                                     \
+    V(EVP)                                                                    \
+    V(BUF)                                                                    \
+    V(OBJ)                                                                    \
+    V(PEM)                                                                    \
+    V(DSA)                                                                    \
+    V(X509)                                                                   \
+    V(ASN1)                                                                   \
+    V(CONF)                                                                   \
+    V(CRYPTO)                                                                 \
+    V(EC)                                                                     \
+    V(SSL)                                                                    \
+    V(BIO)                                                                    \
+    V(PKCS7)                                                                  \
+    V(X509V3)                                                                 \
+    V(PKCS12)                                                                 \
+    V(RAND)                                                                   \
+    V(DSO)                                                                    \
+    V(ENGINE)                                                                 \
+    V(OCSP)                                                                   \
+    V(UI)                                                                     \
+    V(COMP)                                                                   \
+    V(ECDSA)                                                                  \
+    V(ECDH)                                                                   \
+    V(FIPS)                                                                   \
+    V(CMS)                                                                    \
+    V(TS)                                                                     \
+    V(HMAC)                                                                   \
+    V(CT)                                                                     \
+    V(USER)                                                                   \
+
+#else
 #define OSSL_ERROR_CODES_MAP(V)                                               \
     V(SYS)                                                                    \
     V(BN)                                                                     \
@@ -525,6 +586,8 @@ Maybe<bool> Decorate(Environment* env, Local<Object> obj,
     V(KDF)                                                                    \
     V(SM2)                                                                    \
     V(USER)                                                                   \
+
+#endif
 
 #define V(name) case ERR_LIB_##name: lib = #name "_"; break;
     const char* lib = "";
@@ -682,7 +745,11 @@ void SecureBuffer(const FunctionCallbackInfo<Value>& args) {
   CHECK(args[0]->IsUint32());
   Environment* env = Environment::GetCurrent(args);
   uint32_t len = args[0].As<Uint32>()->Value();
+#ifdef LIBRESSL_VERSION_NUMBER
+  char* data = static_cast<char*>(OPENSSL_malloc(len));
+#else
   char* data = static_cast<char*>(OPENSSL_secure_malloc(len));
+#endif
   if (data == nullptr) {
     // There's no memory available for the allocation.
     // Return nothing.
@@ -694,7 +761,15 @@ void SecureBuffer(const FunctionCallbackInfo<Value>& args) {
           data,
           len,
           [](void* data, size_t len, void* deleter_data) {
+#ifdef LIBRESSL_VERSION_NUMBER
+            if (data != NULL) {
+              if (len)
+                OPENSSL_cleanse(data, len);
+              OPENSSL_free(data);
+            }
+#else
             OPENSSL_secure_clear_free(data, len);
+#endif
           },
           data);
   Local<ArrayBuffer> buffer = ArrayBuffer::New(env->isolate(), store);
@@ -702,10 +777,12 @@ void SecureBuffer(const FunctionCallbackInfo<Value>& args) {
 }
 
 void SecureHeapUsed(const FunctionCallbackInfo<Value>& args) {
+#ifndef LIBRESSL_VERSION_NUMBER
   Environment* env = Environment::GetCurrent(args);
   if (CRYPTO_secure_malloc_initialized())
     args.GetReturnValue().Set(
         BigInt::New(env->isolate(), CRYPTO_secure_used()));
+#endif
 }
 }  // namespace
 
